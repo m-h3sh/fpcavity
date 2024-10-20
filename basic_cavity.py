@@ -7,21 +7,26 @@ from finesse.components.space import Space
 from finesse.components.beamsplitter import Beamsplitter
 from finesse.components.cavity import Cavity
 from finesse.analysis.actions.axes import Xaxis
+from finesse.detectors.powerdetector import PowerDetector
 import numpy as np
 import matplotlib.pyplot as plt
 
 # Defining variables
 wavelength = 1064e-9
-cav_length = 0.5
+cav_len = 0.5
 
 # Defining the model
 model = finesse.Model()
+model.lambda0 = wavelength
 
-# Add laser source
+# Adding laser source
 laser = Laser("source", 1.0, 2.82e14)
 model.add(laser)
 
-# TODO: add gaussian parameters to laser
+# Adding Gaussian parameters to the beam
+w0 = np.sqrt(model.lambda0 * ((93.15 + 26)*1e-3 / 2) / np.pi)
+glaser = Gauss("glaser", laser.p1.o, w0=w0, z=0)
+model.add(glaser)
 
 # Defining the mirrors
 mx1 = Mirror("mx1", R=0.99, T=0.01)
@@ -38,7 +43,26 @@ bs = Beamsplitter("bs", 0.5, 0.5, alpha=45.0)
 model.add(bs)
 
 # Defining the detector
+pd = PowerDetector("pd", bs.p4.o)
+model.add(pd)
 
 # Defining the spaces
+model.add(Space("x0", laser.p1, bs.p1, L=cav_len/5))
+model.add(Space("x1", bs.p3, mx1.p1, L=cav_len/5))
+model.add(Space("x2", mx1.p2, mx2.p1, L=cav_len))
+model.add(Space("y0", bs.p2, my1.p1, L=cav_len/5))
+model.add(Space("y1", my1.p2, my2.p1, L=cav_len))
 
-print(model.components[len(model.components)-1].parameters)
+# Adding the cavities
+model.add(Cavity("xcav", mx1.p2.o))
+model.add(Cavity("ycav", my1.p2.o))
+
+xaxis = Xaxis(mx1.phi, 'lin', -180 , 180, 400)
+output = model.run(xaxis)
+
+print(output)
+plt.figure("Analyzing Output")
+plt.plot(output["pd"], label="Output power")
+plt.xlabel
+plt.yscale('log')
+plt.show()
