@@ -62,7 +62,9 @@ output = model.run(xaxis)
 
 print(output)
 plt.figure("Analyzing Output")
-plt.plot(output["pd"], label="Output power")
-plt.xlabel
+x = np.linspace(-180, 180, 401)
+plt.plot(x, output["pd"], label="Output power")
+plt.xticks(np.arange(-180, 180, step=50))
+plt.xlabel("angle (phi)")
 plt.yscale('log')
 plt.show()
