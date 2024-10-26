@@ -6,77 +6,94 @@ from finesse.components.mirror import Mirror
 from finesse.components.space import Space
 from finesse.components.beamsplitter import Beamsplitter
 from finesse.components.cavity import Cavity
+from finesse.components.modulator import Modulator
 from finesse.analysis.actions.axes import Xaxis
 from finesse.detectors.powerdetector import PowerDetector
+from finesse.detectors.powerdetector import PowerDetectorDemod1
 import numpy as np
 import matplotlib.pyplot as plt
 
 # Defining variables
 wavelength = 1064e-9
-cav_len = 0.49999967 # resonant length for wavelength 1064 nm
+cav_len = 0.5
 
 # Defining the model
 model = finesse.Model()
 # model.lambda0 = wavelength
 
 # Adding laser source
-laser = Laser("source", 1.0, 2.8167763157e14)
+laser = Laser("source", 1, 2.8167763157e14)
 model.add(laser)
 
-# Adding Gaussian parameters to the beam
-w0 = np.sqrt((3e8/laser.f) * ((93.15 + 26)*1e-3 / 2) / np.pi)
-glaser = Gauss("glaser", laser.p1.o, w0=w0, z=0)
-model.add(glaser)
+# Adding modulation to the laser
+mod = Modulator("mod", 30e6, 0.7, 3)
+model.add(mod)
 
 # Defining the mirrors
-mx1 = Mirror("mx1", R=0.99, L=0.0)
-mx2 = Mirror("mx2", R=0.999, T=0.001)
-my1 = Mirror("my1", R=0.99, L=0.0)
-my2 = Mirror("my2", R=0.999, T=0.001)
-model.add(mx1)
-model.add(mx2)
-model.add(my1)
-model.add(my2)
+m1 = Mirror("m1", R=0.9, L=0.0, Rc=0.7)
+m2 = Mirror("m2", R=0.9, L=0.0, Rc=0.7)
+model.add(m1)
+model.add(m2)
 
 # Adding 6 dof's to the mirrors
 # In finesse the optical path is along z axis
 
-
-# Defining the beamsplitter
-bs = Beamsplitter("bs", 0.5, 0.5, alpha=45.0)
-model.add(bs)
-
-# Defining the detector
-pd = PowerDetector("pd", bs.p4.o)
-model.add(pd)
+# Defining the detectors
+pd_trans = PowerDetector("pd_trans", m2.p2.o)
+model.add(pd_trans)
+pd_ref = PowerDetector("pd_ref", m1.p1.o)
+model.add(pd_ref)
 
 # Defining the spaces
-model.add(Space("x0", laser.p1, bs.p1, L=cav_len/5))
-model.add(Space("x1", bs.p3, mx1.p1, L=cav_len/5))
-model.add(Space("x2", mx1.p2, mx2.p1, L=cav_len))
-model.add(Space("y0", bs.p2, my1.p1, L=cav_len/5))
-model.add(Space("y1", my1.p2, my2.p1, L=cav_len))
+model.add(Space("s0", laser.p1, mod.p1))
+model.add(Space("s1", mod.p2, m1.p1))
+model.add(Space("s2", m1.p2, m2.p1, L=cav_len))
 
 # Adding the cavities
-model.add(Cavity("xcav", mx1.p2.o))
-model.add(Cavity("ycav", my1.p2.o))
+cav = Cavity("cav", m1.p2.o)
+model.add(cav)
+print(cav.g)
 
-xaxis = Xaxis(mx1.phi, 'lin', -180 , 180, 400)
-# xaxis = Xaxis(laser.f, 'lin', 2.44e14, 2.84e14, 300)
-# xaxis = Xaxis(x2.L, 'lin', 0.5, 0.6, 200)
+# First we plot the modulated signal (reflected and transmitted) v/s m2.phi
+xaxis = Xaxis(m2.phi, 'lin', -100, 0, 400)
+
+mod.f = 10e6
+output = model.run(xaxis)
+plt.figure("Without Modulation")
+plt.plot(output["pd_trans"], label="Transmitted Power", color="blue")
+plt.legend()
+plt.plot()
+plt.xlabel("m2.phi")
+
+mod.f = 30e6
 output = model.run(xaxis)
 
 print(output)
-plt.figure("Analyzing Output")
-x = np.linspace(-180, 180, 401)
-plt.plot(x, output["pd"], label="Output Power")
-plt.xticks(np.arange(-180, 180, step=50))
-plt.xlabel("angle (phi)")
-plt.yscale('log')
+plt.figure("With Modulation")
+plt.plot(output["pd_trans"], label="Transmitted Power", color="blue")
+plt.plot(output["pd_ref"], label="Reflected Power", color="black")
+plt.legend()
+plt.plot()
+plt.xlabel("m2.phi")
+# plt.yscale('log')
+
+
+# Demodulating the reflected signal
+
+outputs = []
+model.remove(pd_ref)
+for phase in np.linspace(0, 90, endpoint=True, num=6):
+    pd = PowerDetectorDemod1("pd", m1.p1.o, mod.f, phase)
+    model.add(pd)
+    output = model.run(xaxis)
+    outputs.append([output, phase])
+    model.remove(pd)
+
+plt.figure("Demodulated Reflected Power (Error Signal)")
+for output in outputs:
+    plt.plot(output[0]["pd"], label=f"{output[1]}")
+
+plt.legend()
+plt.plot()
+plt.xlabel("m2.phi")
 plt.show()
-
-
-# plt.plot(output["pd"], label="Output Power")
-# plt.ylabel("Output power (W)")
-# plt.yscale("log")
-# plt.show()
