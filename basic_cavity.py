@@ -10,6 +10,8 @@ from finesse.components.modulator import Modulator
 from finesse.analysis.actions.axes import Xaxis
 from finesse.detectors.powerdetector import PowerDetector
 from finesse.detectors.powerdetector import PowerDetectorDemod1
+from finesse.locks import Lock
+from finesse.analysis.actions.locks import RunLocks
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -52,30 +54,35 @@ model.add(Space("s2", m1.p2, m2.p1, L=cav_len))
 # Adding the cavities
 cav = Cavity("cav", m1.p2.o)
 model.add(cav)
-print(cav.g)
+print(f"Cavity g parameters are {cav.g}")
 
 # First we plot the modulated signal (reflected and transmitted) v/s m2.phi
-xaxis = Xaxis(m2.phi, 'lin', -100, 0, 400)
+xlimits = [-100, 0, 400]
+xaxis = Xaxis(m2.phi, 'lin', xlimits[0], xlimits[1], xlimits[2])
+x = np.linspace(xlimits[0], xlimits[1], xlimits[2]+1)
 
 mod.f = 10e6
 output = model.run(xaxis)
-plt.figure("Without Modulation")
-plt.plot(output["pd_trans"], label="Transmitted Power", color="blue")
+
+plt.subplot(2, 3, 1)
+plt.title("Without Modulation")
+plt.plot(x, output["pd_trans"], label="trans", color="blue")
+plt.xlabel("m2.phi")
+plt.ylabel("Power")
 plt.legend()
 plt.plot()
-plt.xlabel("m2.phi")
 
 mod.f = 30e6
 output = model.run(xaxis)
 
-print(output)
-plt.figure("With Modulation")
-plt.plot(output["pd_trans"], label="Transmitted Power", color="blue")
-plt.plot(output["pd_ref"], label="Reflected Power", color="black")
+plt.subplot(2, 3, 2)
+plt.title("With Modulation")
+plt.plot(x, output["pd_trans"], label="trans", color="blue")
+plt.plot(x, output["pd_ref"], label="refl", color="black")
+plt.xlabel("m2.phi")
+plt.ylabel("Power")
 plt.legend()
 plt.plot()
-plt.xlabel("m2.phi")
-# plt.yscale('log')
 
 
 # Demodulating the reflected signal
@@ -89,11 +96,59 @@ for phase in np.linspace(0, 90, endpoint=True, num=6):
     outputs.append([output, phase])
     model.remove(pd)
 
-plt.figure("Demodulated Reflected Power (Error Signal)")
+plt.subplot(2, 3, 3)
+plt.title("Error Signal")
 for output in outputs:
-    plt.plot(output[0]["pd"], label=f"{output[1]}")
-
+    plt.plot(x, output[0]["pd"], label=f"{output[1]}")
+plt.xlabel("m2.phi")
+plt.ylabel("Demodulated Power")
 plt.legend()
 plt.plot()
+
+# Checking for max error gradient
+
+phases = np.arange(-90, 30, 1)
+
+gradients = []
+for phase in phases:
+    testpd = PowerDetectorDemod1("pd", m1.p1.o, mod.f, phase)
+    model.add(testpd)
+    output = model.run("xaxis(m2.phi, lin, -1, 1, 2)")
+    var = output["pd"]
+    gradients.append((var[0] - var[-1])/2)
+    model.remove(testpd)
+
+# Find the maximum gradient for the error signal
+
+gradients = np.array(gradients)
+idxmax = np.argmax(np.abs(gradients))
+print(f'Maximum error signal gradient occurs at {phases[idxmax]} degrees')
+
+plt.subplot(2, 3, 4)
+plt.title("Error Gradients")
+plt.plot(phases,gradients)
+plt.xlabel('Demodulation Phase (°)')
+plt.ylabel('Error Signal Gradient (arb)');
+
+# Locking the cavity
+
+pdh = PowerDetectorDemod1("pdh", m1.p1.o, mod.f, phases[idxmax])
+model.add(pdh)
+lock = Lock("lock", pdh, m1.phi, -10, 1e-8)
+model.add(lock)
+
+# Checking if cavity is locked
+
+pd_ref = PowerDetector("pd_ref", m1.p1.o)
+model.add(pd_ref)
+output = model.run(Xaxis(m2.phi, 'lin', 0, 100, 400, pre_step=RunLocks()))
+
+plt.subplot(2, 3, 5)
+plt.title("Checking Locking")
+plt.plot(x, output["pd_trans"], label="trans", color="blue")
+plt.plot(x, output["pd_ref"], label="refl", color="black")
+plt.legend()
 plt.xlabel("m2.phi")
+plt.ylabel("Power")
+plt.plot()
 plt.show()
