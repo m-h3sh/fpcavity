@@ -24,11 +24,11 @@ model = finesse.Model()
 # model.lambda0 = wavelength
 
 # Adding laser source
-laser = Laser("source", 1, 2.8167763157e14)
+laser = Laser("source", 1, 100)
 model.add(laser)
 
 # Adding modulation to the laser
-mod = Modulator("mod", 30e6, 0.7, 3)
+mod = Modulator("mod", 5000000, 0.7, 3)
 model.add(mod)
 
 # Defining the mirrors
@@ -47,6 +47,7 @@ pd_ref = PowerDetector("pd_ref", m1.p1.o)
 model.add(pd_ref)
 
 # Defining the spaces
+
 model.add(Space("s0", laser.p1, mod.p1))
 model.add(Space("s1", mod.p2, m1.p1))
 model.add(Space("s2", m1.p2, m2.p1, L=cav_len))
@@ -57,11 +58,11 @@ model.add(cav)
 print(f"Cavity g parameters are {cav.g}")
 
 # First we plot the modulated signal (reflected and transmitted) v/s m2.phi
-xlimits = [-100, 0, 400]
+xlimits = [-180, 180, 400]
 xaxis = Xaxis(m2.phi, 'lin', xlimits[0], xlimits[1], xlimits[2])
 x = np.linspace(xlimits[0], xlimits[1], xlimits[2]+1)
 
-mod.f = 10e6
+mod.midx = 0
 output = model.run(xaxis)
 
 plt.subplot(2, 3, 1)
@@ -72,7 +73,7 @@ plt.ylabel("Power")
 plt.legend()
 plt.plot()
 
-mod.f = 30e6
+mod.midx = 0.9
 output = model.run(xaxis)
 
 plt.subplot(2, 3, 2)
@@ -107,7 +108,7 @@ plt.plot()
 
 # Checking for max error gradient
 
-phases = np.arange(-90, 30, 1)
+phases = np.arange(-90, 90, 1)
 
 gradients = []
 for phase in phases:
