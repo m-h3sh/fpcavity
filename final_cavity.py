@@ -1,5 +1,6 @@
 # Importing the libraries
 import finesse
+from finesse.analysis.actions import beam
 from finesse.components.laser import Laser
 from finesse.components.gauss import Gauss
 from finesse.components.mirror import Mirror
@@ -11,33 +12,37 @@ from finesse.analysis.actions.axes import Xaxis
 from finesse.detectors.powerdetector import PowerDetector
 from finesse.detectors.powerdetector import PowerDetectorDemod1
 from finesse.locks import Lock
+from finesse.tracing.tools import propagate_beam
 from finesse.analysis.actions.locks import RunLocks
 import numpy as np
 import matplotlib.pyplot as plt
 
 # Defining variables
 wavelength = 1064e-9
-cav_len = 0.5
+cav_len = 1.0
+c = 2.99705e8
 
 # Defining the model
 model = finesse.Model()
-# model.lambda0 = wavelength
+model.lambda0 = wavelength
 
 # Adding laser source
-laser = Laser("source", 1, 100)
+laser = Laser("source", P=1, f=0)
 model.add(laser)
 
 # Adding modulation to the laser
-mod = Modulator("mod", 5000000, 0.7, 3)
+# Choose modulation freq such that side bands
+# are out of FWHN of carrier band
+mod = Modulator("mod", 50000000, 0.7, 3)
 model.add(mod)
 
 # Defining the mirrors
-m1 = Mirror("m1", R=0.9, L=0.0, Rc=0.7)
-m2 = Mirror("m2", R=0.9, L=0.0, Rc=0.7)
+# Lower reflectivity for lower finesse
+m1 = Mirror("m1", R=0.85, L=0.0, Rc=1.5)
+m2 = Mirror("m2", R=0.90, L=0.0, Rc=1.5)
 model.add(m1)
 model.add(m2)
 
-# Adding 6 dof's to the mirrors
 # In finesse the optical path is along z axis
 
 # Defining the detectors
@@ -56,6 +61,9 @@ model.add(Space("s2", m1.p2, m2.p1, L=cav_len))
 cav = Cavity("cav", m1.p2.o)
 model.add(cav)
 print(f"Cavity g parameters are {cav.g}")
+print(cav.FSR) # 149896229.0
+print(cav.finesse) # 23.437748716808976
+print(cav.FWHM) # 6395504.568768506
 
 # First we plot the modulated signal (reflected and transmitted) v/s m2.phi
 xlimits = [-180, 180, 400]
@@ -73,7 +81,9 @@ plt.ylabel("Power")
 plt.legend()
 plt.plot()
 
-mod.midx = 0.9
+# Turn on modulation
+
+mod.midx = 0.7
 output = model.run(xaxis)
 
 plt.subplot(2, 3, 2)
@@ -133,7 +143,7 @@ plt.ylabel('Error Signal Gradient (arb)');
 
 # Locking the cavity
 
-pdh = PowerDetectorDemod1("pdh", m1.p1.o, mod.f, phases[idxmax])
+pdh = PowerDetectorDemod1("pdh", m1.p1.o, mod.f, phases[idxmax]) # this is the error signal used in PDH locking
 model.add(pdh)
 lock = Lock("lock", pdh, m1.phi, -10, 1e-8)
 model.add(lock)
@@ -153,3 +163,6 @@ plt.xlabel("m2.phi")
 plt.ylabel("Power")
 plt.plot()
 plt.show()
+
+# As expected, when cavity is locked to resonance
+# we get transmitted intensity max
